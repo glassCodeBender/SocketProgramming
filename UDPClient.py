@@ -1,17 +1,20 @@
 from socket import *
 
 """
-This code does not handle exceptions.  
+UDP Client 
 """
 
 # Here we should either provide a string containing either the IP Address of the server or hostname ("cis.poly.edu")
 # If we use a hostname, DNS lookup is done automatically
 serverName = 'hostname'
 serverPort = 12000
+try:
+    # Here we create our socket.
+    # AF_INET says to use IPv4. SOCK_DGRAM says use UDP. The OS takes care of client port number.
+    clientSocket = socket(AF_INET, SOCK_DGRAM)
 
-# Here we create our socket.
-# AF_INET says to use IPv4. SOCK_DGRAM says use UDP. The OS takes care of client port number.
-clientSocket = socket(AF_INET, SOCK_DGRAM)
+except socket.error as err:
+    print("Socket creation failed/n", err)
 
 # Prompts user to write a message to send over socket.
 message = input('Input lowercase sentence: ')
