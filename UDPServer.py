@@ -2,6 +2,7 @@ from socket import *
 
 """
 This code does not handle exceptions. 
+Code taken from "Computer Networking: A Top Down Approach" By Kurose and Ross
 """
 
 # Determine port number to use
