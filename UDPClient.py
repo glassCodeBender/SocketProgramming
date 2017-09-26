@@ -2,6 +2,7 @@ from socket import *
 
 """
 UDP Client 
+Code taken from "Computer Networking: A Top Down Approach" By Kurose and Ross
 """
 
 # Here we should either provide a string containing either the IP Address of the server or hostname ("cis.poly.edu")
