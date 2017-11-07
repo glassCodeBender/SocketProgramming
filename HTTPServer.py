@@ -4,7 +4,8 @@ from time import strftime, gmtime
 
 """
 This will be a simple HTTP server that only handles GET requests. 
-There isn't much to it, but it's not done yet. 
+
+Tested on Firefox, but will test on other browsers soon.
 """
 
 port = 8018     # This is our welcoming socket. There are two sockets created for TCP socket connection.
