@@ -2,28 +2,26 @@ from socket import *
 # import datetime # Used when generating header
 import time as time
 import email.utils as eut
-from rfc822 import parsedate, parsedate_tz
+from rfc822 import parsedate
 
 import pandas as pd
 
 """
-This will be a simple HTTP server that only handles GET requests. 
-There isn't much to it, but it's not done yet. 
+This will be a simple HTTP web cache. It ain't fancy, but it's teaching me a lot about networking.
 """
 
-# Maximum amount of data we can receive in request.
+# Maximum amount of data we can receive in buffer.
 MAX_DATA = 2056
 
 port = 8080     # This is our welcoming socket. There are two sockets created for TCP socket connection.
 
 webPort = 80    # Using port 80 since this server is only for http
 
-# How does the server know it's name?
-
-# Need to determine columns. URL, LastUpdate, WebPage, HTTP/HTTPS, HeaderTemplate
 
 # Create a dataframe with the following columns indexed by 'URL'
-df = pd.DataFrame(columns=['URL', 'LastUpdate', 'WebPage', 'HTTP/HTTPS', 'ResponseHeader', 'RequestHeader', 'Cookie'], index='URL')
+# I doubt we need to store this much info. 'WebPage' should probably be stored in a dictionary.
+# All this data might need to go in dictionaries.
+df = pd.DataFrame(columns=['URL', 'LastUpdate', 'WebPage', 'ResponseHeader', 'RequestHeader', 'Cookie'], index='URL')
 
 """
 # might need to create a dictionary to store the web pages in. 
@@ -78,35 +76,9 @@ def requestPage():
     # This is our http client.
 
 
-def checkCache(url):
-    if url in df:
-        return True
-    else:
-        return False
-
-
-
-def checkUdpTcp:
-    # check if the connection is udp or tcp
-
-def setUpUdp:
-    # set Up Udp
-
-def setUpTcp:
-
-
-def processLastUpdateRequest():
-    # Determine if we need to update the web cache
-
 # if value is not in webcache, add it.
 def addToWebCache():
     # Update the webcache if necessary.
-
-
-def parseHeaderAsClient():
-    # Once we receive a page in response from the web server, we need to parse the header again.
-    modIndex = firstLine.find("Last-Modified:")
-
 
 # request is the data we received.
 """Possibly done"""
@@ -229,27 +201,24 @@ def runProgram(conn, addr):
     # check if url is already in the dataframe
     if parsedHeader[0] in df:
         lastUpdateBool = requestLastUpdate(request, parsedHeader[2])
-    else: 
+    else:
         # request the page.
         # send page back to the client
         # parse last modified time from header
         # create new row in dataframe
         # store data from rows in dataframe
-        
+
 
     if lastUpdateBool:
-        # send page we have stored in webcache 
-    else: 
+        # send page we have stored in webcache
+    else:
         # request the page
-        # store the page in the dataframe (or whatever we put it in) 
+        # store the page in the dataframe (or whatever we put it in)
         # parse the date
-        # change the date in the dataframe 
-    
+        # change the date in the dataframe
+
 
     # Stores url filename
-
-
-
 
     print("Request: ", firstLine, url )
 
@@ -282,8 +251,10 @@ Set-Cookie: NSC_OFX-jij.psh-tibsfqpjou-IUUQ=ffffffff09bcb60a45525d5f4f58455e445a
     """
 
 
-print("\n\rThe server is ready to receive HTTP GET requests.")
+print("\nThe server is ready to receive HTTP GET requests.")
 
+
+"""THIS IS OLD CODE."""
 while True:
     # This is the exclusive socket for client.
     connectionSocket, addr = server.accept()
