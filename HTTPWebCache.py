@@ -1,14 +1,26 @@
 from socket import *
-# import datetime # Used when generating header
+import datetime # Used when generating header
 import time as time
 import email.utils as eut
 from rfc822 import parsedate
+from time import strftime, gmtime
 
 import pandas as pd
 
 """
 This will be a simple HTTP web cache. It ain't fancy, but it's teaching me a lot about networking.
 """
+
+html = """<html>
+<head>
+<title>Alex's Server!!</title>
+</head>
+<body>
+The most basic server in the world!
+</body>
+</html>
+"""
+
 
 # Maximum amount of data we can receive in buffer.
 MAX_DATA = 2056
@@ -21,11 +33,8 @@ webPort = 80    # Using port 80 since this server is only for http
 # Create a dataframe with the following columns indexed by 'URL'
 # I doubt we need to store this much info. 'WebPage' should probably be stored in a dictionary.
 # All this data might need to go in dictionaries.
-df = pd.DataFrame(columns=['URL', 'LastUpdate', 'WebPage', 'ResponseHeader', 'RequestHeader', 'Cookie'], index='URL')
+df = pd.DataFrame(columns=['URL', 'LastUpdate', 'WebPage', 'ResponseHeader'], index='URL')
 
-"""
-# might need to create a dictionary to store the web pages in. 
-"""
 
 server = socket(AF_INET, SOCK_STREAM)
 
@@ -70,17 +79,35 @@ def mkResponseHeader(status):
     # We need a way to pass values here that determine which header.
     return head
 
-def requestPage():
-
+def requestPage(url, request):
     # Send request, receive response.
     # This is our http client.
 
+    sock = socket(AF_INET, SOCK_STREAM)
 
-# if value is not in webcache, add it.
-def addToWebCache():
-    # Update the webcache if necessary.
+    try:
+        print("Requesting page since page isn't in cache yet...\n")
+        # create a socket to connect to the web server
 
-# request is the data we received.
+
+        hostIP = gethostbyname(url)
+        # connect to webserver
+        sock.connect((hostIP, webPort))
+        sock.sendall(request)  # send request to webserver
+
+        # Only want to receive the first part of the data.
+        while len(data) > 0:
+            data = sock.recv(2056)
+        sock.close()
+    except error, (value, message):
+        print("An exeception occurred while trying to get partial data to make header\n")
+        if sock:
+            sock.close()
+
+        print("socket connection to " + url + " failed", value, message)
+
+    return data
+
 """Possibly done"""
 def parseHeaderAsServer(request):
     # grab user agent info from request
@@ -157,7 +184,7 @@ def requestLastUpdate(request, hostName):
     print(receivedPage)
 
     # take response and put it in lastUpdateValue
-    lastUpdateValue = parseLastUpdate(response)
+    (lastUpdate, lastUpdateValue) = parseLastUpdate(response)
 
     lastUpdateBool = False
 
@@ -167,7 +194,7 @@ def requestLastUpdate(request, hostName):
         df.replace(urlRow.loc['LastUpdate'], lastUpdateValue, inplace=True)
         lastUpdateBool = True
 
-    return lastUpdateBool
+    return (lastUpdate, lastUpdateBool)
 
 """Possibly done"""
 def parseLastUpdate(response):
@@ -188,66 +215,92 @@ def parseLastUpdate(response):
         print("Couldn't parse date into the proper time format.")
 
     # make sure datetime format is the same.
-    return exactTime
+    return (lastModDateTime, exactTime)
+
+def requestAndParsePage(request, host):
+    # request the page (request, host).
+    data = requestPage(request, host)
+    # split the header on beginning of html
+    splitData = data.split('<!')
+    header = splitData[0]
+    content = '<!' + splitData[1]
+
+    return header, content
 
 def runProgram(conn, addr):
     request = conn.recv(2056)
 
-    # return (fqdn, cookie)
+    # return (fqdn, cookie, host)
     parsedHeader = parseHeaderAsServer(request)
 
     lastUpdateBool = False
+    cachedPage = False
 
     # check if url is already in the dataframe
     if parsedHeader[0] in df:
-        lastUpdateBool = requestLastUpdate(request, parsedHeader[2])
-    else:
-        # request the page.
+        # Determine the last update time (time, lastUpdateBool)
+        (lastUpdate, lastUpdateBool) = requestLastUpdate(request, parsedHeader[2])
+        cachedPage = True
+
+    # if the page has been updated
+    if lastUpdateBool:
+        (header, content) = requestAndParsePage(request, parsedHeader[2])
+
+
+    # if the page is already cached and doesn't need to be updated.
+    elif cachedPage:
+        row = df.loc(parsedHeader[0])
+
+        content = row['ResponseHeader'] + row['Content']  # request the page
+
         # send page back to the client
         # parse last modified time from header
         # create new row in dataframe
         # store data from rows in dataframe
 
+    # if the page is not in cache
+    else:  # append header to content
 
-    if lastUpdateBool:
-        # send page we have stored in webcache
-    else:
-        # request the page
+        # get header and full page content
+        header, content = requestAndParsePage(request, parsedHeader[2])
+        # parse lastUpdate info from header 
+        lastUpdate, dateTime = parseLastUpdate(header)
+
         # store the page in the dataframe (or whatever we put it in)
+        df.append([parsedHeader[0], lastUpdate, dateTime, content, header], 
+                  columns=['URL', 'LastUpdate', "LastUpdateValue", "Content", "ResponseHeader"])
+
         # parse the date
         # change the date in the dataframe
 
-
-    # Stores url filename
-
+        
     print("Request: ", firstLine, url )
 
     """
     Sample Response: 
     
-HTTP/1.1 200 OK
-Cache-Control: private, max-age=0
-Content-Type: text/html; charset=utf-8
-Expires: Wed, 01 Nov 2017 16:55:24 GMT
-Last-Modified: Thu, 16 Nov 2017 17:55:24 GMT
-Server: Microsoft-IIS/8.5
-X-SharePointHealthScore: 0
-X-AspNet-Version: 4.0.30319
-SPRequestGuid: 57822d9e-5e00-204d-f2e7-25f7c67ce392
-request-id: 57822d9e-5e00-204d-f2e7-25f7c67ce392
-X-FRAME-OPTIONS: SAMEORIGIN
-SPRequestDuration: 708
-SPIisLatency: 0
-Set-Cookie: SPUsageId=2e397f36-dc67-46a2-891a-40f79a038e9a; expires=Thu, 30-Nov-2017 17:55:25 GMT; path=/; HttpOnly
-X-Powered-By: ASP.NET
-MicrosoftSharePointTeamServices: 15.0.0.4709
-X-Content-Type-Options: nosniff
-X-MS-InvokeApp: 1; RequireReadOnly
-Date: Thu, 16 Nov 2017 17:55:24 GMT
-Content-Length: 141184
-Set-Cookie: NSC_OFX-jij.psh-tibsfqpjou-IUUQ=ffffffff09bcb60a45525d5f4f58455e445a4a423660;expires=Thu, 16-Nov-2017 18:14:44 GMT;path=/;httponly
-
-
+HTTP/1.1 200 OK\n
+Cache-Control: private, max-age=0\n
+Content-Type: text/html; charset=utf-8\n
+Expires: Wed, 01 Nov 2017 16:55:24 GMT\n
+Last-Modified: Thu, 16 Nov 2017 17:55:24 GMT\n
+Server: Microsoft-IIS/8.5\n
+X-SharePointHealthScore: 0\n
+X-AspNet-Version: 4.0.30319\n
+SPRequestGuid: 57822d9e-5e00-204d-f2e7-25f7c67ce392\n
+request-id: 57822d9e-5e00-204d-f2e7-25f7c67ce392\n
+X-FRAME-OPTIONS: SAMEORIGIN\n
+SPRequestDuration: 708\n
+SPIisLatency: 0\n
+Set-Cookie: SPUsageId=2e397f36-dc67-46a2-891a-40f79a038e9a; expires=Thu, 30-Nov-2017 17:55:25 GMT; path=/; HttpOnly\n
+X-Powered-By: ASP.NET\n
+MicrosoftSharePointTeamServices: 15.0.0.4709\n
+X-Content-Type-Options: nosniff\n
+X-MS-InvokeApp: 1; RequireReadOnly\n
+Date: Thu, 16 Nov 2017 17:55:24 GMT\n
+Content-Length: 141184\n
+Set-Cookie: NSC_OFX-jij.psh-tibsfqpjou-IUUQ=ffffffff09bcb60a45525d5f4f58455e445a4a423660;expires=Thu, 16-Nov-2017 18:14:44 GMT;path=/;httponly\n
+\n\n
     """
 
 
@@ -275,34 +328,6 @@ while True:
     split_head = header_lines.split()
     print("Printing split_head\n")
     print(str(split_head))
-
-    # check and make sure status line is for a GET request.
-    if split_head[0] == 'GET':
-        # We have no files so this is the only page that doesn't throw error.
-        if split_head[1] == '/':
-            # we are going to the index page.
-            # need to call mkHeader() to make a response and append html onto it.
-            status_response = 'HTTP/1.1 200 OK\n'
-            header = mkHeader(status_response)
-            response = header + html
-
-            # ADD SOMETHING ONTO HEADER
-        elif split_head == "index.dat":
-            # we are going to the index page.
-            # need to call mkHeader() to make a response and append html onto it.
-            status_response = 'HTTP/1.1 200 OK\n'
-            header = mkHeader(status_response)
-            response = header + html
-        else:
-            status_response = 'HTTP/1.1 404 Not Found\n'
-            # header = mkHeader(status_response)
-            response = status_response
-            # ADD SOMETHING ON TO HEADER
-    else:
-        status_response = 'HTTP/1.1 400 Bad Request\n'
-        header = mkHeader(status_response)
-        response = header
-        # ADD SOMETHING ON TO HEADER
 
     # server takes the String converted to uppercase, converts it to bytes, and sends it back to client.
     print("Printing Response:")
