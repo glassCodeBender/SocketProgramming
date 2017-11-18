@@ -244,7 +244,13 @@ def runProgram(conn, addr):
 
     # if the page has been updated
     if lastUpdateBool:
+        # Request full page 
         (header, content) = requestAndParsePage(request, parsedHeader[2])
+        
+        # Update the cache 
+        
+        # send the page on to client 
+        
 
 
     # if the page is already cached and doesn't need to be updated.
@@ -263,11 +269,11 @@ def runProgram(conn, addr):
 
         # get header and full page content
         header, content = requestAndParsePage(request, parsedHeader[2])
-        # parse lastUpdate info from header 
+        # parse lastUpdate info from header
         lastUpdate, dateTime = parseLastUpdate(header)
 
         # store the page in the dataframe (or whatever we put it in)
-        df.append([parsedHeader[0], lastUpdate, dateTime, content, header], 
+        df.append([parsedHeader[0], lastUpdate, dateTime, content, header],
                   columns=['URL', 'LastUpdate', "LastUpdateValue", "Content", "ResponseHeader"])
 
         # parse the date
