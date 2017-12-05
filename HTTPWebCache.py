@@ -1,11 +1,10 @@
 from socket import *
 import datetime # Used when generating header
 import time as time
-import email.utils as eut
 from rfc822 import parsedate
 from time import strftime, gmtime
-
 import pandas as pd
+import hashlib as hashlib
 
 """
 This will be a simple HTTP web cache. It ain't fancy, but it's teaching me a lot about networking.
@@ -21,7 +20,6 @@ The most basic server in the world!
 </html>
 """
 
-
 # Maximum amount of data we can receive in buffer.
 MAX_DATA = 2056
 
@@ -29,12 +27,14 @@ port = 8080     # This is our welcoming socket. There are two sockets created fo
 
 webPort = 80    # Using port 80 since this server is only for http
 
+# create directory to store binary web pages.
+if not os.path.exists('binary_pages'):
+    os.makedirs('binary_pages')
 
-# Create a dataframe with the following columns indexed by 'URL'
-# I doubt we need to store this much info. 'WebPage' should probably be stored in a dictionary.
+# Create a dataframe with the following columns indexed by 'url'
+# I doubt we need to store this much info. 'webpage' should probably be stored in a dictionary.
 # All this data might need to go in dictionaries.
-df = pd.DataFrame(columns=['URL', 'LastUpdate', 'WebPage', 'ResponseHeader'], index='URL')
-
+df = pd.DataFrame(columns=['url', 'last_update', 'last_update_value', 'page_hash', 'response_header'], index='url')
 
 server = socket(AF_INET, SOCK_STREAM)
 
@@ -44,42 +44,56 @@ server.bind(('', port))
 # Tells server to listen for TCP connection requests from client.
 server.listen(1)
 
-def queryCache(url):
-
-    # make sure url is in dataframe
-    if url in df.index:
-
-        # grab row of values from DataFrame
-        row = df.loc(url)
-        # Store webPage in variable.
-        webPage = row.loc('WebPage')
-        lastUpdate = row.loc('LastUpdate')
-    else:
-        # need to add row to dataframe
-        df2 = pd.DataFrame([url, ])
-        df.append(ignore_index = False)
-
-    # we will probably return entire row from here.
 
 
-    return row
+# def queryCache(url):
+# # make sure url is in dataframe
+#    if url in df.index:
+#
+#        # grab row of values from DataFrame
+#        row = df.loc(url)
+#        # Store webpage in variable.
+#        webpage = row.loc('webpage')
+#        last_update = row.loc('last_update')
+#    else:
+#        # need to add row to dataframe
+#        df2 = pd.DataFrame([url, ])
+#        df.append(ignore_index = False)
+#
+#    # we will probably return entire row from here.
+#
+#    return row
 
-def mkResponseHeader(status):
+# write page to file. Return full name to store in dataframe.
+def write_page(response):
+    page_hash = hashlib.md5(response)
+    full_name = 'binary_pages/' + page_hash + '.bin'
+
+    print('Attempting to write binary page to file as ' + full_name)
+
+    with open(full_name, 'wb') as file:
+        file.write(response)
+
+    return full_name
+
+def mk_response_header(status):
     new_time = strftime("Date: %a, %d %b %Y %H:%M:%S GMT", gmtime())
 
     # length of the string in bytes (not the string object)
     length = len(html.encode('utf-8'))
 
-    # head = status + "\r\nContent Type: text/html" + "\r\n\r\n"
+    # head = status + "\r\ncontent Type: text/html" + "\r\n\r\n"
     head = status + "Connection: close\n" + "Date: " + new_time +  "\nServer: Simple Python Server\n" + \
-           "Last modified: Tue, 7 Nov 2017 14:03:00 GMT\n" + "Content Length: " + str(length) + \
-           "\nContent Type: text/html" + "\n\n"
+           "Last modified: Tue, 7 Nov 2017 14:03:00 GMT\n" + "content Length: " + str(length) + \
+           "\ncontent Type: text/html" + "\n\n"
 
     # here's where we make the header for our response.
     # We need a way to pass values here that determine which header.
     return head
 
-def requestPage(url, request):
+
+# Request full page. Only supports IPv4 for now.
+def request_page(url, request):
     # Send request, receive response.
     # This is our http client.
 
@@ -89,67 +103,69 @@ def requestPage(url, request):
         print("Requesting page since page isn't in cache yet...\n")
         # create a socket to connect to the web server
 
+        host_ip = gethostbyname(url)
 
-        hostIP = gethostbyname(url)
-        # connect to webserver
-        sock.connect((hostIP, webPort))
-        sock.sendall(request)  # send request to webserver
-
-        # Only want to receive the first part of the data.
-        while len(data) > 0:
+        # connect to webserver and send request
+        with socket(AF_INET,SOCK_STREAM) as sock:
+            sock.connect((host_ip, webPort))
+            sock.sendall(request)  # send request to webserver
             data = sock.recv(2056)
+
+        print('Received data:\n', repr(data))
         sock.close()
-    except error, (value, message):
+    except error:
         print("An exeception occurred while trying to get partial data to make header\n")
         if sock:
             sock.close()
-
-        print("socket connection to " + url + " failed", value, message)
+        print("socket connection to " + url + " failed" + str(error))
 
     return data
 
-"""Possibly done"""
-def parseHeaderAsServer(request):
+
+# Possibly done
+def parse_header_server(request):
+
     # grab user agent info from request
     # create header we're sending in web request
-    firstLine = request.split('\n')[0]
+    first_line = request.split('\n')[0]
     # grab information after GET request (url file)
-    urlFile = firstLine.split(' ')[1]
+    url_file = first_line.split(' ')[1]
 
     # use index.dat if the request is "/"
 
     # depending on the header style, we get FQDN in different ways.
-    if "http:" in urlFile:
-        fqdn = urlFile # the request has the FQDN in it
+    if "http:" in url_file:
+        fqdn = url_file # the request has the FQDN in it
         # urFileDrop = "http://"
-        removeHttp = urlFile[7:]
+        remove_http = url_file[7:]
 
-        host = removeHttp.split('/')[0] # everything before http://ww.ggo.com/
+        host = remove_http.split('/')[0] # everything before http://ww.ggo.com/
     else:
-        hostIndex = request.find("Host:")
+        host_index = request.find("Host:")
         # slice string from beginning of url to end of string.
-        afterHost = request[:hostIndex + 6]
+        after_host = request[:host_index + 6]
         # split host on blank space and return first value (the host)
 
         """Might need to split on new line"""
-        host = afterHost.split('\n')[0]
-        fqdn = host + urlFile
+        host = after_host.split('\n')[0]
+        fqdn = host + url_file
 
-    cookieIndex = request.find("Cookie:")
+    cookie_index = request.find("Cookie:")
 
-    if cookieIndex:
-        afterCookie = cookieIndex[:cookieIndex + 8]
+    if cookie_index:
+        after_cookie = cookie_index[:cookie_index + 8]
         """Might need to split on new line"""
-        cookie = afterCookie.split('\n')
+        cookie = after_cookie.split('\n')
         ## 8
     else:
         cookie = ''
 
     return [fqdn, cookie, host]
 
-"""Possibly done"""
-def requestLastUpdate(request, hostName):
+
+# Possibly done
     # Send request to determine when the last update was.
+def request_last_update(request, host_name):
 
     print("Requesting last updated time...\n")
     # create a socket to connect to the web server
@@ -157,108 +173,162 @@ def requestLastUpdate(request, hostName):
 
     # not sure how to
     try:
-        hostIP = gethostbyname(hostName)
+        host_ip = gethostbyname(host_name)
         # connect to webserver
-        sock.connect((hostIP, webPort))
-        sock.sendall(request)  # send request to webserver
+        sock.connect((host_ip, webPort))
+        header = request.replace('GET', 'HEAD', 1)
+        print('request_last_update() header:', header)
+        sock.sendall(header.encode())  # send request to webserver
 
         # Only want to receive the first part of the data.
+        print('receiving header')
         while True:
             data = sock.recv(2056)
-            if len(data) > 2000:
+            if len(data) <= 0:
                 break
 
         sock.close()
-    except error, (value, message):
-        print("An exeception occurred while trying to get partial data to make header\n")
+
+    except error:
+        print("An exception occurred while trying to get the header\n")
         if sock:
             sock.close()
 
-        print("socket connection to " + hostName + " failed", value, message)
-
+        print("socket connection to " + host_name + " failed")
 
     # convert received data to a string
-    receivedPage = str(data)
+    response = str(data)
 
-    print("Here's the data that was received from requestLastUpdate")
-    print(receivedPage)
+    print("Here's the data that was received from request_last_update()")
+    print(response)
 
-    # take response and put it in lastUpdateValue
-    (lastUpdate, lastUpdateValue) = parseLastUpdate(response)
+    # take response and put it in last_update_value
+    (last_update, last_update_value) = parselast_update(response)
 
-    lastUpdateBool = False
+    last_update_bool = False
 
-    urlRow = df.loc['URL']
+    url_row = df.loc['url']
+    print('Printing url_row: ' + url_row)
 
-    if lastUpdateValue < urlRow['LastUpdate']: #compare dates and we don't have most recent
-        df.replace(urlRow.loc['LastUpdate'], lastUpdateValue, inplace=True)
-        lastUpdateBool = True
+    if last_update_value < url_row['last_update']:  # compare dates and we don't have most recent
 
-    return (lastUpdate, lastUpdateBool)
+        df.replace(url_row.loc['last_update'], last_update_value, inplace=True)
+        last_update_bool = True
 
-"""Possibly done"""
-def parseLastUpdate(response):
-    # grab lastUpdate from response
+    return last_update, last_update_bool
 
-    print("Attempting to parse last-modified data\n")
 
-    updateIndex = response.find("Last-Modified:")
-    # 15
-    modLine = response[:updateIndex + 15]
-    lastModDateTime = modLine.split('\n')[0]
+# Possibly done
+def parselast_update(response):
+    # grab last_update from response
+
+    print("Attempting to parse last-modified date in parselast_update()\n")
+
+    # Convert response to string, just in case.
+    response_str = str(response)
+
+    # Find index position of Last-Modified
+    update_index = response_str.find("Last-Modified:")
+
+    # Find index position of date.
+    mod_line = response[:update_index + 15]
+    print('mod_line is:', mod_line)
+    lastmod_datetime = mod_line.split('\n')[0]
 
     # parse date
-    parsedDate = parsedate(lastModDateTime)
-    try:
-        exactTime = time.mktime(parsedDate)
-    except TypeError:
+    parsed_date = parsedate(lastmod_datetime)
+    print('parsed_date is:', parsed_date)
+
+    exact_time = time.mktime(parsed_date)
+
+    if not exact_time:
         print("Couldn't parse date into the proper time format.")
 
     # make sure datetime format is the same.
-    return (lastModDateTime, exactTime)
+    return lastmod_datetime, exact_time
 
+
+# request the page (request, host).
 def requestAndParsePage(request, host):
-    # request the page (request, host).
-    data = requestPage(request, host)
-    # split the header on beginning of html
-    splitData = data.split('<!')
-    header = splitData[0]
-    content = '<!' + splitData[1]
 
-    return header, content
+    data = request_page(request, host)
+    # split the header on beginning of html
+    data_str = str(data)
+    split_data = data_str.split('<!')
+    header = split_data[0]
+
+    return header, data
+
+
+# get web-page from file.
+def get_filepage(file_name):
+    try:
+        with open(file_name, 'rb') as file:
+            data = file.read()
+    except IOError:
+        print("Failed to retrieve cached page.")
+        data = ''
+        pass
+
+    return data
+
+def send_page(conn, page):
+    print('Sending page to user.')
+    while len(page) > 0:
+        conn.send(page)
 
 def runProgram(conn, addr):
+
+    # this is in binary format. I think...
     request = conn.recv(2056)
 
     # return (fqdn, cookie, host)
-    parsedHeader = parseHeaderAsServer(request)
+    parsed_header = parse_header_server(request)
 
-    lastUpdateBool = False
-    cachedPage = False
+    last_update_bool = False
+    cached_page = False
 
     # check if url is already in the dataframe
-    if parsedHeader[0] in df:
-        # Determine the last update time (time, lastUpdateBool)
-        (lastUpdate, lastUpdateBool) = requestLastUpdate(request, parsedHeader[2])
-        cachedPage = True
+    if parsed_header[0] in df:
+        # Determine the last update time (time, last_update_bool)
+        (last_update, last_update_bool) = request_last_update(request, parsed_header[2])
+        cached_page = True
 
     # if the page has been updated
-    if lastUpdateBool:
-        # Request full page 
-        (header, content) = requestAndParsePage(request, parsedHeader[2])
-        
-        # Update the cache 
-        
-        # send the page on to client 
-        
+    if last_update_bool:
+        # Request full page
+        (header, content) = requestAndParsePage(request, parsed_header[2])
 
+        # write page to file.
+        file_name = write_page(content)
+
+        # update filename in dataframe
+        df.loc[(df['url'] == parsed_header[0]), 'page_hash'] = file_name
+        new_date, exact_time = parselast_update(content)
+        df.loc[(df['url'] == parsed_header[0]), 'last_update_value'] = exact_time
+
+        # Update the data in dataframe
+
+        # send the page on to client
 
     # if the page is already cached and doesn't need to be updated.
-    elif cachedPage:
-        row = df.loc(parsedHeader[0])
+    elif cached_page:
+        file_name = df.loc[(df['url'] == parsed_header[0]), 'page_hash']
+        # df_by_index = df_row['url']
+        # file_name = df_by_index['page_hash']
 
-        content = row['ResponseHeader'] + row['Content']  # request the page
+        page = get_filepage(file_name)
 
+        if not page:
+            (header, full_content) = requestAndParsePage(request, parsed_header[2])
+            """Pending"""
+            # Update the cache
+
+            # send the page to client.
+            send_page(conn, page)
+
+
+        """Pending"""
         # send page back to the client
         # parse last modified time from header
         # create new row in dataframe
@@ -268,26 +338,32 @@ def runProgram(conn, addr):
     else:  # append header to content
 
         # get header and full page content
-        header, content = requestAndParsePage(request, parsedHeader[2])
-        # parse lastUpdate info from header
-        lastUpdate, dateTime = parseLastUpdate(header)
+        header, content = requestAndParsePage(request, parsed_header[2])
+        response = (header + content).encode()
+
+        # send all the data on to the client.
+        while len(response) > 0:
+            conn.send(response)
+
+        # parse last_update info from header
+        last_update, header_datetime = parselast_update(header)
+
 
         # store the page in the dataframe (or whatever we put it in)
-        df.append([parsedHeader[0], lastUpdate, dateTime, content, header],
-                  columns=['URL', 'LastUpdate', "LastUpdateValue", "Content", "ResponseHeader"])
+        # , columns=['url', 'last_update', "last_update_value", "page_content", "response_header"])
+        df.append([parsed_header[0], last_update, header_datetime, content, header])
 
-        # parse the date
-        # change the date in the dataframe
+        """PENDING"""
+        # send the page to the client
 
-        
-    print("Request: ", firstLine, url )
+   #  print("Request: ", first_line, url )
 
     """
     Sample Response: 
     
 HTTP/1.1 200 OK\n
 Cache-Control: private, max-age=0\n
-Content-Type: text/html; charset=utf-8\n
+content-Type: text/html; charset=utf-8\n
 Expires: Wed, 01 Nov 2017 16:55:24 GMT\n
 Last-Modified: Thu, 16 Nov 2017 17:55:24 GMT\n
 Server: Microsoft-IIS/8.5\n
@@ -301,10 +377,10 @@ SPIisLatency: 0\n
 Set-Cookie: SPUsageId=2e397f36-dc67-46a2-891a-40f79a038e9a; expires=Thu, 30-Nov-2017 17:55:25 GMT; path=/; HttpOnly\n
 X-Powered-By: ASP.NET\n
 MicrosoftSharePointTeamServices: 15.0.0.4709\n
-X-Content-Type-Options: nosniff\n
+X-content-Type-Options: nosniff\n
 X-MS-InvokeApp: 1; RequireReadOnly\n
 Date: Thu, 16 Nov 2017 17:55:24 GMT\n
-Content-Length: 141184\n
+content-Length: 141184\n
 Set-Cookie: NSC_OFX-jij.psh-tibsfqpjou-IUUQ=ffffffff09bcb60a45525d5f4f58455e445a4a423660;expires=Thu, 16-Nov-2017 18:14:44 GMT;path=/;httponly\n
 \n\n
     """
@@ -312,33 +388,33 @@ Set-Cookie: NSC_OFX-jij.psh-tibsfqpjou-IUUQ=ffffffff09bcb60a45525d5f4f58455e445a
 
 print("\nThe server is ready to receive HTTP GET requests.")
 
-
 """THIS IS OLD CODE."""
 while True:
     # This is the exclusive socket for client.
     connectionSocket, addr = server.accept()
     runProgram(connectionSocket, addr)
+
     # receives message and clientAddress. All bytes are both guaranteed to arrive and to arrive in order.
     # message = connectionSocket.recv(999999)
-    message_str = str(message)
-    print("Print Message received")
-    print(message_str[1:])
+    #message_str = str(message)
+    #print("Print Message received")
+    #print(message_str[1:])
     # decoded = message.decode()
 
     # Split header into list of lines
-    header_lines = message_str[2:]
-    print("Printing header lines..\n")
-    print(header_lines)
+    #header_lines = message_str[2:]
+    ##print("Printing header lines..\n")
+    #print(header_lines)
     # split first line on white space.
 
-    split_head = header_lines.split()
-    print("Printing split_head\n")
-    print(str(split_head))
+    #split_head = header_lines.split()
+    #print("Printing split_head\n")
+    #print(str(split_head))
 
     # server takes the String converted to uppercase, converts it to bytes, and sends it back to client.
-    print("Printing Response:")
-    print(response)
-    connectionSocket.sendall(response.encode())
+    # print("Printing Response:")
+    # print(response)
+    #connectionSocket.sendall(response.encode())
 
     # Close socket connection. However, the serverSocket connection remains open.
     connectionSocket.close()  # different than UDP
