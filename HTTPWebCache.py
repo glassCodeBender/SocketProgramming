@@ -1,7 +1,7 @@
 from socket import *
 import datetime # Used when generating header
 import time as time
-from rfc822 import parsedate
+# from rfc822 import parsedate
 from time import strftime, gmtime
 import pandas as pd
 import hashlib as hashlib
