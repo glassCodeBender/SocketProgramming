@@ -1,8 +1,5 @@
 from socket import *
 import datetime # Used when generating header
-# import time as time
-# from rfc822 import parsedate
-from time import strftime, gmtime
 import pandas as pd
 import hashlib as hashlib
 import os as os
@@ -10,18 +7,8 @@ import os as os
 """
 This will be a simple HTTP web cache. It ain't fancy, but it's teaching me a lot about networking.
 
-I realize that it's weird to write this with dataframes, but I did it anyways because if you don't 
+I realize that it's weird to write this with a dataframe, but I did it anyways because if you don't 
 lose it, you lose it. I don't spend enough time with pandas as I should.
-"""
-
-html = """<html>
-<head>
-<title>Alex's Server!!</title>
-</head>
-<body>
-The most basic server in the world!
-</body>
-</html>
 """
 
 # Maximum amount of data we can receive in buffer.
@@ -38,7 +25,7 @@ if not os.path.exists('binary_pages'):
 # Create a dataframe with the following columns indexed by 'url'
 # I doubt we need to store this much info. 'webpage' should probably be stored in a dictionary.
 # All this data might need to go in dictionaries.
-df = pd.DataFrame(columns=['url', 'last_update', 'last_update_value', 'page_hash', 'response_header'])
+df = pd.DataFrame(columns=['url', 'last_update_value', 'page_hash', 'response_header'])
 
 server = socket(AF_INET, SOCK_STREAM)
 
@@ -48,29 +35,11 @@ server.bind(('', port))
 # Tells server to listen for TCP connection requests from client.
 server.listen(1)
 
-# def queryCache(url):
-# # make sure url is in dataframe
-#    if url in df.index:
-#
-#        # grab row of values from DataFrame
-#        row = df.loc(url)
-#        # Store webpage in variable.
-#        webpage = row.loc('webpage')
-#        last_update = row.loc('last_update')
-#    else:
-#        # need to add row to dataframe
-#        df2 = pd.DataFrame([url, ])
-#        df.append(ignore_index = False)
-#
-#    # we will probably return entire row from here.
-#
-#    return row
-
 
 # write page to file. Return full name to store in dataframe.
 def write_page(response):
-    page_hash = hashlib.md5(response)
-    full_name = 'binary_pages/' + page_hash + '.bin'
+    page_hash = hashlib.md5(response).hexdigest()
+    full_name = 'binary_pages/' + str(page_hash) + '.bin'
 
     print('Attempting to write binary page to file as ' + full_name)
 
@@ -78,23 +47,6 @@ def write_page(response):
         file.write(response)
 
     return full_name
-
-
-# this is not used in the cache.
-def mk_response_header(status):
-    new_time = strftime("Date: %a, %d %b %Y %H:%M:%S GMT", gmtime())
-
-    # length of the string in bytes (not the string object)
-    length = len(html.encode('utf-8'))
-
-    # head = status + "\r\ncontent Type: text/html" + "\r\n\r\n"
-    head = status + "Connection: close\n" + "Date: " + new_time +  "\nServer: Simple Python Server\n" + \
-           "Last modified: Tue, 7 Nov 2017 14:03:00 GMT\n" + "content Length: " + str(length) + \
-           "\ncontent Type: text/html" + "\n\n"
-
-    # here's where we make the header for our response.
-    # We need a way to pass values here that determine which header.
-    return head
 
 
 # Request full page. Only supports IPv4 for now.
@@ -139,8 +91,6 @@ def request_page(request, host):
 def parse_header_server(request):
 
     print('Printing request', request)
-    # grab user agent info from request
-    # create header we're sending in web request
     first_line = request.split('\n')[0]
 
     # grab information after GET request (url file)
@@ -173,7 +123,7 @@ def parse_header_server(request):
 
 
 # Send request to determine when the last update was.
-def request_last_update(request, host_name):
+def request_last_update(request, host_name, fqdn):
 
     print("Requesting last updated time...\n")
     # create a socket to connect to the web server
@@ -181,7 +131,7 @@ def request_last_update(request, host_name):
 
     try:
         host_ip = gethostbyname(host_name)
-        print('the host_ip is', host_ip)
+        # print('the host_ip is', host_ip)
         # connect to webserver
         sock.connect((host_ip, webPort))
         header = str(request).replace('GET', 'HEAD', 1)
@@ -202,7 +152,7 @@ def request_last_update(request, host_name):
         print("An exception occurred while trying to get the header\n")
         if sock:
             sock.close()
-
+        pass
         print("socket connection to " + host_name + " failed")
 
     # convert received data to a string
@@ -212,16 +162,12 @@ def request_last_update(request, host_name):
     print(response)
 
     # take response and put it in last_update_value
-    (last_update, last_update_value) = parselast_update(response)
+    (last_update, last_update_bool) = parselast_update(response)
 
     last_update_bool = False
 
-    url_row = df.loc['url']
-    print('Printing url_row: ' + url_row)
-
-    if last_update_value < url_row['last_update']:  # compare dates and we don't have most recent
-
-        df.replace(url_row.loc['last_update'], last_update_value, inplace=True)
+    if last_update < df[('url' == fqdn), 'last_update_value']:  # compare dates and we don't have most recent
+        df.loc[(df['url'] == fqdn), 'last_update_value'] = last_update
         last_update_bool = True
 
     return last_update, last_update_bool
@@ -236,27 +182,36 @@ def parselast_update(response):
     # Convert response to string, just in case.
     response_str = str(response)
 
+    # If we can't store in cache, just send it on.
+    cacheable = False
+
+    if 'Last-Modified' in response_str:
+        cacheable = True
+
+    # cache_control_index = response_str.find("Cache-Control")
+
     # Find index position of Last-Modified
-    update_index = response_str.find("Last-Modified:")
+    if cacheable:
+        update_index = response_str.find("Last-Modified")
+        mod_line = response_str[update_index + 15:]
+        print('mod_line is:', mod_line)
+        lastmod_datetime = mod_line.split('GMT')[0]
 
-    # Find index position of date.
-    mod_line = response_str[:update_index + 15]
+        # parse date
+        # parsed_date = parsedate(lastmod_datetime)
+        print('lastmod_datetime is:', lastmod_datetime)
 
-    print('mod_line is:', mod_line)
-    lastmod_datetime = mod_line.split('\n')[0]
+        new_time = lastmod_datetime + 'GMT'
 
-    # parse date
-    # parsed_date = parsedate(lastmod_datetime)
-    print('lastmod_datetime is:', lastmod_datetime)
+        exact_time = datetime.datetime.strptime(new_time, '%a, %V %b %G %H:%M:%S %Z')
+        print("Exact time is: " + str(exact_time))
 
-    exact_time = datetime.datetime.strptime(lastmod_datetime, '%b %d %H:%M:%S %Y')
-    print("Exact time is: " + str(exact_time))
-
-    if not exact_time:
+    else:
+        exact_time = datetime
         print("Couldn't parse date into the proper time format.")
 
     # make sure datetime format is the same.
-    return lastmod_datetime, exact_time
+    return cacheable, exact_time
 
 
 # request the page (request, host).
@@ -269,7 +224,7 @@ def requestAndParsePage(request, host):
     data_str = str(data)
 
     print('here is the raw page', data_str)
-    split_data = data_str.split('<!')
+    split_data = data_str.split('\n\n')
     header = split_data[0]
 
     return header, data
@@ -296,17 +251,12 @@ def send_page(conn, page):
     # if page is str, we need to convert to byte array.
     if page is str:
         content = page.encode()
-        print('Sending page to user.')
-        while True:
-            conn.send(content)
-            if len(content) <= 0:
-                break
+        print('Sending page to user from if.')
+        conn.sendall(content)
+
     else:
-        print("Sending page to user.")
-        while True:
-            conn.send(page)
-            if len(page) <= 0:
-                break
+        print("Sending page to user from else.")
+        conn.sendall(page)
 
 
 # this is pretty much the main method.
@@ -326,7 +276,7 @@ def run_program(conn, addr):
     # check if url is already in the dataframe
     if fqdn in df:
         # Determine the last update time (time, last_update_bool)
-        (last_update, last_update_bool) = request_last_update(request, host)
+        (header, last_update_bool) = request_last_update(request, host, fqdn)
         cached_page = True
 
     # if the page has been updated
@@ -340,7 +290,7 @@ def run_program(conn, addr):
 
         # update filename in dataframe
         df.loc[(df['url'] == fqdn), 'page_hash'] = file_name
-        new_date, exact_time = parselast_update(content)
+        cacheable, exact_time = parselast_update(content)
         df.loc[(df['url'] == fqdn), 'last_update_value'] = exact_time
 
         send_page(conn, content)
@@ -375,81 +325,29 @@ def run_program(conn, addr):
         print('The header is:', header)
         print('The Content is:', str(content))
         # send all the data on to the client.
-        while True:
-            conn.send(content)
-            if len(content) <= 0:
-                break
+
+        conn.send(content)
 
         # parse last_update info from header
-        last_update, header_datetime = parselast_update(header)
+        cacheable, header_datetime = parselast_update(header)
 
         page_hash = write_page(content)
+
         # store the page in the dataframe (or whatever we put it in)
         # , columns=['url', 'last_update', "last_update_value", "page_hash", "response_header"])
-        df.append([fqdn, last_update, header_datetime, page_hash, header])
+        if cacheable:
+            df.append([fqdn, header_datetime, page_hash, header])
 
         # Send page to client.
         send_page(conn, content)
 
-   #  print("Request: ", first_line, url )
-
-    """
-    Sample Response: 
-    
-HTTP/1.1 200 OK\n
-Cache-Control: private, max-age=0\n
-content-Type: text/html; charset=utf-8\n
-Expires: Wed, 01 Nov 2017 16:55:24 GMT\n
-Last-Modified: Thu, 16 Nov 2017 17:55:24 GMT\n
-Server: Microsoft-IIS/8.5\n
-X-SharePointHealthScore: 0\n
-X-AspNet-Version: 4.0.30319\n
-SPRequestGuid: 57822d9e-5e00-204d-f2e7-25f7c67ce392\n
-request-id: 57822d9e-5e00-204d-f2e7-25f7c67ce392\n
-X-FRAME-OPTIONS: SAMEORIGIN\n
-SPRequestDuration: 708\n
-SPIisLatency: 0\n
-Set-Cookie: SPUsageId=2e397f36-dc67-46a2-891a-40f79a038e9a; expires=Thu, 30-Nov-2017 17:55:25 GMT; path=/; HttpOnly\n
-X-Powered-By: ASP.NET\n
-MicrosoftSharePointTeamServices: 15.0.0.4709\n
-X-content-Type-Options: nosniff\n
-X-MS-InvokeApp: 1; RequireReadOnly\n
-Date: Thu, 16 Nov 2017 17:55:24 GMT\n
-content-Length: 141184\n
-Set-Cookie: NSC_OFX-jij.psh-tibsfqpjou-IUUQ=ffffffff09bcb60a45525d5f4f58455e445a4a423660;expires=Thu, 16-Nov-2017 18:14:44 GMT;path=/;httponly\n
-\n\n
-    """
-
 
 print("\nThe server is ready to receive HTTP GET requests.")
 
-"""THIS IS OLD CODE."""
 while True:
     # This is the exclusive socket for client.
     connectionSocket, addr = server.accept()
     run_program(connectionSocket, addr)
-
-    # receives message and clientAddress. All bytes are both guaranteed to arrive and to arrive in order.
-    # message = connectionSocket.recv(999999)
-    #message_str = str(message)
-    #print("Print Message received")
-    #print(message_str[1:])
-    # decoded = message.decode()
-
-    # Split header into list of lines
-    #header_lines = message_str[2:]
-    ##print("Printing header lines..\n")
-    #print(header_lines)
-    # split first line on white space.
-
-    #split_head = header_lines.split()
-    #print("Printing split_head\n")
-    #print(str(split_head))
-
-    # server takes the String converted to uppercase, converts it to bytes, and sends it back to client.
-    # print("Printing Response:")
-    # print(response)
-    #connectionSocket.sendall(response.encode())
 
     # Close socket connection. However, the serverSocket connection remains open.
     connectionSocket.close()  # different than UDP
