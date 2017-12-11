@@ -195,15 +195,15 @@ def parselast_update(response):
         update_index = response_str.find("Last-Modified")
         mod_line = response_str[update_index + 15:]
         print('mod_line is:', mod_line)
-        lastmod_datetime = mod_line.split('GMT')[0]
+        lastmod_datetime = mod_line.split('\n')[0]
 
         # parse date
         # parsed_date = parsedate(lastmod_datetime)
         print('lastmod_datetime is:', lastmod_datetime)
 
-        new_time = lastmod_datetime + 'GMT'
+        # new_time = lastmod_datetime + 'GMT'
 
-        exact_time = datetime.datetime.strptime(new_time, '%a, %V %b %G %H:%M:%S %Z')
+        exact_time = datetime.datetime.strptime(lastmod_datetime, '%a, %V %b %G %H:%M:%S %Z')
         print("Exact time is: " + str(exact_time))
 
     else:
@@ -249,14 +249,18 @@ def send_page(conn, page):
     print('Sending page to client.')
 
     # if page is str, we need to convert to byte array.
-    if page is str:
+    if type(page) is str:
         content = page.encode()
         print('Sending page to user from if.')
         conn.sendall(content)
 
-    else:
+    elif type(page) is bytes:
         print("Sending page to user from else.")
         conn.sendall(page)
+    else:
+        print("The page isn't in the format that it should be in...")
+        content = page.encode()
+        conn.sendall(content)
 
 
 # this is pretty much the main method.
@@ -267,7 +271,9 @@ def run_program(conn, addr):
 
     print('parsing header')
     # return (fqdn, cookie, host)
-    (fqdn, host) = parse_header_server(str(request))
+    # request_decoded = request.decode()
+    request_str = str(request)
+    (fqdn, host) = parse_header_server(request_str)
 
     last_update_bool = False
     cached_page = False
@@ -323,6 +329,7 @@ def run_program(conn, addr):
         header, content = requestAndParsePage(request, host)
 
         print('The header is:', header)
+        # content_decoded = content.decode()
         print('The Content is:', str(content))
         # send all the data on to the client.
 
