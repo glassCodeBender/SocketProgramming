@@ -9,6 +9,9 @@ This will be a simple HTTP web cache. It ain't fancy, but it's teaching me a lot
 
 I realize that it's weird to write this with a dataframe, but I did it anyways because if you don't 
 lose it, you lose it. I don't spend enough time with pandas as I should.
+
+I think the cache works. However, the server needs to be updated to deal w/
+complex types of data (such as compression or encryption).
 """
 
 # Maximum amount of data we can receive in buffer.
